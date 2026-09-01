@@ -10,9 +10,9 @@ type User struct {
 }
 
 type Conversation struct {
-	ID         int64     `json:"id"`
-	OtherUser  User      `json:"other_user"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID        int64     `json:"id"`
+	OtherUser User      `json:"other_user"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type Message struct {
