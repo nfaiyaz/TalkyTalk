@@ -82,7 +82,6 @@ func writeUnauthorized(w http.ResponseWriter) {
 	})
 }
 
-
 func fmtSscan(s string, value *int64) (int, error) {
 	return fmt.Sscan(s, value)
 }

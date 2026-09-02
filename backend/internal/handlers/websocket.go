@@ -10,9 +10,9 @@ import (
 )
 
 type WebSocketHandler struct {
-	Auth            middleware.Auth
-	Hub             *realtime.Hub
-	FrontendOrigin  string
+	Auth           middleware.Auth
+	Hub            *realtime.Hub
+	FrontendOrigin string
 }
 
 func (h WebSocketHandler) Connect(w http.ResponseWriter, r *http.Request) {
