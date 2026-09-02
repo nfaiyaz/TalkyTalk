@@ -1,122 +1,153 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { api, clearSession, getSession } from './api';
+import { connectSocket } from './socket';
+import AuthForm from './components/AuthForm';
+import Sidebar from './components/Sidebar';
+import ChatWindow from './components/ChatWindow';
+import './styles.css';
 
-function App() {
-  const [count, setCount] = useState(0)
+export default function App() {
+  const [session, setSession] = useState(getSession());
+  const [users, setUsers] = useState([]);
+  const [conversations, setConversations] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [messages, setMessages] = useState([]);
+
+  const selectedRef = useRef(null);
+
+  useEffect(() => {
+    selectedRef.current = selected;
+  }, [selected]);
+
+  const loadConversations = useCallback(async () => {
+    try {
+      const chats = await api('/api/conversations');
+      setConversations(chats);
+    } catch (error) {
+      console.error(error);
+    }
+  }, []);
+
+  const logout = useCallback(() => {
+    clearSession();
+    setSession(null);
+    setSelected(null);
+    setMessages([]);
+  }, []);
+
+  useEffect(() => {
+    if (!session) return;
+
+    async function loadInitial() {
+      try {
+        const [people, chats] = await Promise.all([
+          api('/api/users'),
+          api('/api/conversations'),
+        ]);
+
+        setUsers(people);
+        setConversations(chats);
+      } catch (error) {
+        if (error.message === 'unauthorized') {
+          logout();
+        } else {
+          console.error(error);
+        }
+      }
+    }
+
+    loadInitial();
+
+    const socket = connectSocket((event) => {
+      if (event.type !== 'new_message') return;
+
+      const message = event.data;
+
+      if (selectedRef.current?.id === message.conversation_id) {
+        setMessages((current) =>
+          current.some((m) => m.id === message.id)
+            ? current
+            : [...current, message]
+        );
+      }
+
+      loadConversations();
+    });
+
+    return () => {
+      socket?.close();
+    };
+  }, [session, loadConversations, logout]);
+
+  async function selectConversation(conversation) {
+    setSelected(conversation);
+
+    try {
+      const conversationMessages = await api(
+        `/api/conversations/${conversation.id}/messages`
+      );
+
+      setMessages(conversationMessages);
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  async function startChat(user) {
+    try {
+      const conversation = await api('/api/conversations', {
+        method: 'POST',
+        body: JSON.stringify({
+          user_id: user.id,
+        }),
+      });
+
+      await loadConversations();
+      await selectConversation(conversation);
+    } catch (error) {
+      alert(error.message);
+    }
+  }
+
+  async function sendMessage(body) {
+    if (!selected) return;
+
+    try {
+      await api(`/api/conversations/${selected.id}/messages`, {
+        method: 'POST',
+        body: JSON.stringify({
+          body,
+        }),
+      });
+
+      // The WebSocket event will append the saved message.
+    } catch (error) {
+      alert(error.message);
+    }
+  }
+
+  if (!session) {
+    return <AuthForm onAuthenticated={setSession} />;
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="app-shell">
+      <Sidebar
+        session={session}
+        conversations={conversations}
+        users={users}
+        selectedId={selected?.id}
+        onSelectConversation={selectConversation}
+        onStartChat={startChat}
+        onLogout={logout}
+      />
 
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+      <ChatWindow
+        session={session}
+        conversation={selected}
+        messages={messages}
+        onSend={sendMessage}
+      />
+    </div>
+  );
 }
-
-export default App
