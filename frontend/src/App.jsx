@@ -15,6 +15,8 @@ export default function App() {
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
 
+  const [unreadCounts, setUnreadCounts] = useState({});
+
   const selectedRef = useRef(null);
 
   useEffect(() => {
@@ -35,6 +37,7 @@ export default function App() {
     setSession(null);
     setSelected(null);
     setMessages([]);
+    setUnreadCounts({});
   }, []);
 
   useEffect(() => {
@@ -71,6 +74,12 @@ export default function App() {
             ? current
             : [...current, message]
         );
+      } else if (message.sender_id !== session.user.id) {
+        setUnreadCounts((current) => ({
+          ...current,
+          [message.conversation_id]:
+            (current[message.conversation_id] || 0) + 1,
+        }));
       }
 
       setConversations((current) => {
@@ -98,6 +107,18 @@ export default function App() {
 
   async function selectConversation(conversation) {
     setSelected(conversation);
+
+    setUnreadCounts((current) => {
+      if (!current[conversation.id]) {
+        return current;
+      }
+
+      const updated = { ...current };
+      delete updated[conversation.id];
+
+      return updated;
+    });
+
     setHasMoreMessages(true);
 
     try {
@@ -194,6 +215,7 @@ export default function App() {
         conversations={conversations}
         users={users}
         selectedId={selected?.id}
+        unreadCounts={unreadCounts}
         onSelectConversation={selectConversation}
         onStartChat={startChat}
         onLogout={logout}

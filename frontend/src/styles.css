@@ -259,3 +259,22 @@ small {
 		max-width: 88%;
 	}
 }
+
+.conversation-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.unread-badge {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 11px;
+  background: #1769e0;
+  color: white;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 800;
+  flex: 0 0 auto;
+}
