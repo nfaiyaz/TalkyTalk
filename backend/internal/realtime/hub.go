@@ -66,3 +66,10 @@ func (h *Hub) SendToUsers(userIDs []int64, event Event) {
 		}
 	}
 }
+
+func (h *Hub) Ping(conn *websocket.Conn) error {
+	h.writeMu.Lock()
+	defer h.writeMu.Unlock()
+
+	return conn.WriteMessage(websocket.PingMessage, nil)
+}
