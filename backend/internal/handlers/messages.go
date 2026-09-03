@@ -32,19 +32,34 @@ func (h MessageHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	userID := middleware.UserID(r)
 
+	const pageSize = 50
+
+	beforeID := int64(0)
+
+	before := r.URL.Query().Get("before")
+
+	if before != "" {
+		beforeID, err = strconv.ParseInt(before, 10, 64)
+		if err != nil || beforeID <= 0 {
+			writeError(w, http.StatusBadRequest, "invalid before cursor")
+			return
+		}
+	}
+
 	if !h.isParticipant(r, conversationID, userID) {
 		writeError(w, http.StatusForbidden, "not a participant")
 		return
 	}
 
 	rows, err := h.DB.Query(r.Context(), `
-SELECT m.id, m.conversation_id, m.sender_id, u.name, m.body, m.created_at
-FROM messages m
-JOIN users u ON u.id = m.sender_id
-WHERE m.conversation_id = $1
-ORDER BY m.created_at ASC
-LIMIT 200
-`, conversationID)
+	SELECT m.id, m.conversation_id, m.sender_id, u.name, m.body, m.created_at
+	FROM messages m
+	JOIN users u ON u.id = m.sender_id
+	WHERE m.conversation_id = $1
+	  AND ($2 = 0 OR m.id < $2)
+	ORDER BY m.id DESC
+	LIMIT $3
+`, conversationID, beforeID, pageSize)
 
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not load messages")
@@ -71,6 +86,10 @@ LIMIT 200
 		}
 
 		messages = append(messages, m)
+	}
+
+	for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
+		messages[i], messages[j] = messages[j], messages[i]
 	}
 
 	writeJSON(w, http.StatusOK, messages)

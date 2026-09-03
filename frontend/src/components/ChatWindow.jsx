@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
-export default function ChatWindow({ session, conversation, messages, onSend }) {
+export default function ChatWindow({ session, conversation, messages, onSend, onLoadOlderMessages, hasMoreMessages,
+  loadingOlderMessages }) {
   const [text, setText] = useState('');
 
   const bottomRef = useRef(null);
@@ -44,6 +45,12 @@ export default function ChatWindow({ session, conversation, messages, onSend }) 
           <small>{conversation.other_user.email}</small>
         </div>
       </header>
+
+      {conversation && hasMoreMessages && (
+      <button onClick={onLoadOlderMessages}>
+        {loadingOlderMessages ? 'Loading...' : 'Load older messages'}
+      </button>
+    )}
 
       <section className="messages">
         {messages.map((m) => {

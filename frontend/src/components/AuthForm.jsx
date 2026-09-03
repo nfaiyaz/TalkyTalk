@@ -44,7 +44,7 @@ export default function AuthForm({ onAuthenticated }) {
 	return (
 		<div className="auth-page">
 			<form className="auth-card" onSubmit={submit}>
-				<h1>Go Chat</h1>
+				<h1>TalkyTalk (Go Chat)</h1>
 
 				<p>
 					{mode === 'login'

@@ -12,6 +12,8 @@ export default function App() {
   const [conversations, setConversations] = useState([]);
   const [selected, setSelected] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
 
   const selectedRef = useRef(null);
 
@@ -80,18 +82,58 @@ export default function App() {
   }, [session, loadConversations, logout]);
 
   async function selectConversation(conversation) {
-    setSelected(conversation);
+  setSelected(conversation);
+  setHasMoreMessages(true);
 
-    try {
-      const conversationMessages = await api(
-        `/api/conversations/${conversation.id}/messages`
-      );
+  try {
+    const loadedMessages = await api(
+      `/api/conversations/${conversation.id}/messages`
+    );
 
-      setMessages(conversationMessages);
-    } catch (error) {
-      console.error(error);
+    setMessages(loadedMessages);
+
+    if (loadedMessages.length < 50) {
+      setHasMoreMessages(false);
     }
+  } catch (error) {
+    console.error(error);
   }
+}
+
+async function loadOlderMessages() {
+  if (!selected || loadingOlderMessages || !hasMoreMessages) {
+    return;
+  }
+
+  if (messages.length === 0) {
+    return;
+  }
+
+  const oldestMessage = messages[0];
+
+  setLoadingOlderMessages(true);
+
+  try {
+    const olderMessages = await api(
+      `/api/conversations/${selected.id}/messages?before=${oldestMessage.id}`
+    );
+
+    if (olderMessages.length === 0) {
+      setHasMoreMessages(false);
+      return;
+    }
+
+    setMessages((current) => [...olderMessages, ...current]);
+
+    if (olderMessages.length < 50) {
+      setHasMoreMessages(false);
+    }
+  } catch (error) {
+    console.error(error);
+  } finally {
+    setLoadingOlderMessages(false);
+  }
+}
 
   async function startChat(user) {
     try {
@@ -147,6 +189,9 @@ export default function App() {
         conversation={selected}
         messages={messages}
         onSend={sendMessage}
+        onLoadOlderMessages={loadOlderMessages}
+  hasMoreMessages={hasMoreMessages}
+  loadingOlderMessages={loadingOlderMessages}
       />
     </div>
   );
