@@ -73,67 +73,82 @@ export default function App() {
         );
       }
 
-      loadConversations();
+      setConversations((current) => {
+        const conversation = current.find(
+          (item) => item.id === message.conversation_id
+        );
+
+        if (!conversation) {
+          return current;
+        }
+
+        return [
+          conversation,
+          ...current.filter(
+            (item) => item.id !== message.conversation_id
+          ),
+        ];
+      });
     });
 
     return () => {
       socket?.close();
     };
-  }, [session, loadConversations, logout]);
+  }, [session, logout]);
 
   async function selectConversation(conversation) {
-  setSelected(conversation);
-  setHasMoreMessages(true);
+    setSelected(conversation);
+    setHasMoreMessages(true);
 
-  try {
-    const loadedMessages = await api(
-      `/api/conversations/${conversation.id}/messages`
-    );
+    try {
+      const loadedMessages = await api(
+        `/api/conversations/${conversation.id}/messages`
+      );
 
-    setMessages(loadedMessages);
+      setMessages(loadedMessages);
 
-    if (loadedMessages.length < 50) {
-      setHasMoreMessages(false);
+      if (loadedMessages.length < 50) {
+        setHasMoreMessages(false);
+      }
+    } catch (error) {
+      console.error(error);
     }
-  } catch (error) {
-    console.error(error);
-  }
-}
-
-async function loadOlderMessages() {
-  if (!selected || loadingOlderMessages || !hasMoreMessages) {
-    return;
   }
 
-  if (messages.length === 0) {
-    return;
-  }
-
-  const oldestMessage = messages[0];
-
-  setLoadingOlderMessages(true);
-
-  try {
-    const olderMessages = await api(
-      `/api/conversations/${selected.id}/messages?before=${oldestMessage.id}`
-    );
-
-    if (olderMessages.length === 0) {
-      setHasMoreMessages(false);
+  async function loadOlderMessages() {
+    if (!selected || loadingOlderMessages || !hasMoreMessages) {
       return;
     }
 
-    setMessages((current) => [...olderMessages, ...current]);
-
-    if (olderMessages.length < 50) {
-      setHasMoreMessages(false);
+    if (messages.length === 0) {
+      return;
     }
-  } catch (error) {
-    console.error(error);
-  } finally {
-    setLoadingOlderMessages(false);
+
+    const oldestMessage = messages[0];
+
+    setLoadingOlderMessages(true);
+
+    try {
+      const olderMessages = await api(
+        `/api/conversations/${selected.id}/messages?before=${oldestMessage.id}`
+      );
+
+      if (olderMessages.length === 0) {
+        setHasMoreMessages(false);
+        return;
+      }
+
+      setMessages((current) => [...olderMessages, ...current]);
+
+      if (olderMessages.length < 50) {
+        setHasMoreMessages(false);
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoadingOlderMessages(false);
+    }
   }
-}
 
   async function startChat(user) {
     try {
@@ -190,8 +205,8 @@ async function loadOlderMessages() {
         messages={messages}
         onSend={sendMessage}
         onLoadOlderMessages={loadOlderMessages}
-  hasMoreMessages={hasMoreMessages}
-  loadingOlderMessages={loadingOlderMessages}
+        hasMoreMessages={hasMoreMessages}
+        loadingOlderMessages={loadingOlderMessages}
       />
     </div>
   );
