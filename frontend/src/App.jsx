@@ -18,6 +18,7 @@ export default function App() {
   const [unreadCounts, setUnreadCounts] = useState({});
 
   const selectedRef = useRef(null);
+  const [onlineUsers, setOnlineUsers] = useState([]);
 
   useEffect(() => {
     selectedRef.current = selected;
@@ -38,6 +39,7 @@ export default function App() {
     setSelected(null);
     setMessages([]);
     setUnreadCounts({});
+    setOnlineUsers([]);
   }, []);
 
   useEffect(() => {
@@ -64,40 +66,61 @@ export default function App() {
     loadInitial();
 
     const socket = connectSocket((event) => {
-      if (event.type !== 'new_message') return;
+      if (event.type === 'new_message') {
+        const message = event.data;
 
-      const message = event.data;
-
-      if (selectedRef.current?.id === message.conversation_id) {
-        setMessages((current) =>
-          current.some((m) => m.id === message.id)
-            ? current
-            : [...current, message]
-        );
-      } else if (message.sender_id !== session.user.id) {
-        setUnreadCounts((current) => ({
-          ...current,
-          [message.conversation_id]:
-            (current[message.conversation_id] || 0) + 1,
-        }));
-      }
-
-      setConversations((current) => {
-        const conversation = current.find(
-          (item) => item.id === message.conversation_id
-        );
-
-        if (!conversation) {
-          return current;
+        if (selectedRef.current?.id === message.conversation_id) {
+          setMessages((current) =>
+            current.some((m) => m.id === message.id)
+              ? current
+              : [...current, message]
+          );
+        } else if (message.sender_id !== session.user.id) {
+          setUnreadCounts((current) => ({
+            ...current,
+            [message.conversation_id]:
+              (current[message.conversation_id] || 0) + 1,
+          }));
         }
 
-        return [
-          conversation,
-          ...current.filter(
-            (item) => item.id !== message.conversation_id
-          ),
-        ];
-      });
+        setConversations((current) => {
+          const conversation = current.find(
+            (item) => item.id === message.conversation_id
+          );
+
+          if (!conversation) {
+            return current;
+          }
+
+          return [
+            conversation,
+            ...current.filter(
+              (item) => item.id !== message.conversation_id
+            ),
+          ];
+        });
+
+        return;
+      }
+
+      if (event.type === 'online_users') {
+        setOnlineUsers(event.data);
+        return;
+      }
+
+      if (event.type === 'presence') {
+        const { user_id, online } = event.data;
+
+        setOnlineUsers((current) => {
+          if (online) {
+            return current.includes(user_id)
+              ? current
+              : [...current, user_id];
+          }
+
+          return current.filter((id) => id !== user_id);
+        });
+      }
     });
 
     return () => {
@@ -214,6 +237,7 @@ export default function App() {
         session={session}
         conversations={conversations}
         users={users}
+        onlineUsers={onlineUsers}
         selectedId={selected?.id}
         unreadCounts={unreadCounts}
         onSelectConversation={selectConversation}

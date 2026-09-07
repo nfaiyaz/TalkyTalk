@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/gorilla/websocket"
 
@@ -11,9 +10,9 @@ import (
 )
 
 type WebSocketHandler struct {
-	Auth            middleware.Auth
-	Hub             *realtime.Hub
-	FrontendOrigin  string
+	Auth           middleware.Auth
+	Hub            *realtime.Hub
+	FrontendOrigin string
 }
 
 func (h WebSocketHandler) Connect(w http.ResponseWriter, r *http.Request) {
@@ -36,44 +35,40 @@ func (h WebSocketHandler) Connect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.Hub.Add(userID, conn)
+	wasOffline := h.Hub.Add(userID, conn)
 
 	defer func() {
-		h.Hub.Remove(userID, conn)
+		wentOffline := h.Hub.Remove(userID, conn)
+
 		_ = conn.Close()
-	}()
 
-	const (
-		pongWait   = 60 * time.Second
-		pingPeriod = 30 * time.Second
-	)
-
-	conn.SetReadDeadline(time.Now().Add(pongWait))
-
-	conn.SetPongHandler(func(string) error {
-		conn.SetReadDeadline(time.Now().Add(pongWait))
-		return nil
-	})
-
-	ticker := time.NewTicker(pingPeriod)
-	defer ticker.Stop()
-
-	done := make(chan struct{})
-
-	go func() {
-		for {
-			select {
-			case <-ticker.C:
-				if err := h.Hub.Ping(conn); err != nil {
-					close(done)
-					return
-				}
-
-			case <-done:
-				return
-			}
+		if wentOffline {
+			h.Hub.Broadcast(realtime.Event{
+				Type: "presence",
+				Data: map[string]any{
+					"user_id": userID,
+					"online":  false,
+				},
+			})
 		}
 	}()
+
+	// Send the currently online users to the newly connected user.
+	h.Hub.SendToUser(userID, realtime.Event{
+		Type: "online_users",
+		Data: h.Hub.OnlineUserIDs(),
+	})
+
+	// Notify other connected users when this user becomes online.
+	if wasOffline {
+		h.Hub.Broadcast(realtime.Event{
+			Type: "presence",
+			Data: map[string]any{
+				"user_id": userID,
+				"online":  true,
+			},
+		})
+	}
 
 	// Keep reading so we detect browser disconnects.
 	for {

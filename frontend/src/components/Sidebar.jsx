@@ -2,6 +2,7 @@ export default function Sidebar({
   session,
   conversations,
   users,
+  onlineUsers = [],
   selectedId,
   unreadCounts,
   onSelectConversation,
@@ -25,7 +26,8 @@ export default function Sidebar({
 
       <div className="list">
         {conversations.map((c) => {
-          const unreadCount = unreadCounts[c.id] || 0;
+          const unreadCount = unreadCounts?.[c.id] || 0;
+          const isOnline = onlineUsers.includes(c.other_user.id);
 
           return (
             <button
@@ -41,8 +43,7 @@ export default function Sidebar({
 
               <span className="conversation-info">
                 <strong>{c.other_user.name}</strong>
-
-                <small>{c.other_user.email}</small>
+                <small>{isOnline ? 'Online' : 'Offline'}</small>
               </span>
 
               {unreadCount > 0 && (
@@ -58,22 +59,26 @@ export default function Sidebar({
       <h3>People</h3>
 
       <div className="list people-list">
-        {users.map((user) => (
-          <button
-            key={user.id}
-            className="list-item"
-            onClick={() => onStartChat(user)}
-          >
-            <span className="avatar">
-              {user.name[0]?.toUpperCase()}
-            </span>
+        {users.map((user) => {
+          const isOnline = onlineUsers.includes(user.id);
 
-            <span>
-              <strong>{user.name}</strong>
-              <small>Start chat</small>
-            </span>
-          </button>
-        ))}
+          return (
+            <button
+              key={user.id}
+              className="list-item"
+              onClick={() => onStartChat(user)}
+            >
+              <span className="avatar">
+                {user.name[0]?.toUpperCase()}
+              </span>
+
+              <span>
+                <strong>{user.name}</strong>
+                <small>{isOnline ? 'Online' : 'Offline'}</small>
+              </span>
+            </button>
+          );
+        })}
       </div>
     </aside>
   );
