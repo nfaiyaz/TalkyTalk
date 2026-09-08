@@ -70,9 +70,19 @@ export function connectSocket(onEvent) {
     }, delay);
   }
 
+  function send(data) {
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    socket.send(JSON.stringify(data));
+  }
+
   connect();
 
   return {
+    send,
+
     close() {
       stopped = true;
 

@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/gorilla/websocket"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"go-chat-app/backend/internal/middleware"
 	"go-chat-app/backend/internal/realtime"
@@ -12,7 +14,15 @@ import (
 type WebSocketHandler struct {
 	Auth           middleware.Auth
 	Hub            *realtime.Hub
+	DB             *pgxpool.Pool
 	FrontendOrigin string
+}
+
+type typingEvent struct {
+	Type string `json:"type"`
+	Data struct {
+		ConversationID int64 `json:"conversation_id"`
+	} `json:"data"`
 }
 
 func (h WebSocketHandler) Connect(w http.ResponseWriter, r *http.Request) {
@@ -43,37 +53,109 @@ func (h WebSocketHandler) Connect(w http.ResponseWriter, r *http.Request) {
 		_ = conn.Close()
 
 		if wentOffline {
-			h.Hub.Broadcast(realtime.Event{
-				Type: "presence",
-				Data: map[string]any{
-					"user_id": userID,
-					"online":  false,
+			h.Hub.Broadcast(
+				realtime.Event{
+					Type: "presence",
+					Data: map[string]any{
+						"user_id": userID,
+						"online":  false,
+					},
 				},
-			})
+			)
 		}
 	}()
 
-	// Send the currently online users to the newly connected user.
-	h.Hub.SendToUser(userID, realtime.Event{
-		Type: "online_users",
-		Data: h.Hub.OnlineUserIDs(),
-	})
+	onlineUsers := h.Hub.OnlineUserIDs()
 
-	// Notify other connected users when this user becomes online.
+	h.Hub.SendToUser(
+		userID,
+		realtime.Event{
+			Type: "online_users",
+			Data: onlineUsers,
+		},
+	)
+
 	if wasOffline {
-		h.Hub.Broadcast(realtime.Event{
-			Type: "presence",
-			Data: map[string]any{
-				"user_id": userID,
-				"online":  true,
+		h.Hub.Broadcast(
+			realtime.Event{
+				Type: "presence",
+				Data: map[string]any{
+					"user_id": userID,
+					"online":  true,
+				},
 			},
-		})
+		)
 	}
 
-	// Keep reading so we detect browser disconnects.
 	for {
-		if _, _, err := conn.ReadMessage(); err != nil {
+		_, message, err := conn.ReadMessage()
+		if err != nil {
 			return
 		}
+
+		var event typingEvent
+
+		if err := json.Unmarshal(message, &event); err != nil {
+			continue
+		}
+
+		if event.Type != "typing_start" && event.Type != "typing_stop" {
+			continue
+		}
+
+		if event.Data.ConversationID == 0 {
+			continue
+		}
+
+		participantIDs := h.participantIDs(
+			r,
+			event.Data.ConversationID,
+			userID,
+		)
+
+		if len(participantIDs) == 0 {
+			continue
+		}
+
+		h.Hub.SendToUsers(
+			participantIDs,
+			realtime.Event{
+				Type: event.Type,
+				Data: map[string]any{
+					"conversation_id": event.Data.ConversationID,
+					"user_id":         userID,
+				},
+			},
+		)
 	}
+}
+
+func (h WebSocketHandler) participantIDs(
+	r *http.Request,
+	conversationID int64,
+	currentUserID int64,
+) []int64 {
+	rows, err := h.DB.Query(r.Context(), `
+		SELECT user_id
+		FROM conversation_participants
+		WHERE conversation_id = $1
+		AND user_id <> $2
+	`, conversationID, currentUserID)
+	if err != nil {
+		return nil
+	}
+
+	defer rows.Close()
+
+	ids := []int64{}
+
+	for rows.Next() {
+		var id int64
+
+		if rows.Scan(&id) == nil {
+			ids = append(ids, id)
+		}
+	}
+
+	return ids
 }

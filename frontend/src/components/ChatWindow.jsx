@@ -1,14 +1,38 @@
 import { useEffect, useRef, useState } from 'react';
 
-export default function ChatWindow({ session, conversation, messages, onSend, onLoadOlderMessages, hasMoreMessages,
-  loadingOlderMessages }) {
+export default function ChatWindow({
+  session,
+  conversation,
+  messages,
+  onSend,
+  onLoadOlderMessages,
+  hasMoreMessages,
+  loadingOlderMessages,
+  onTypingStart,
+  onTypingStop,
+  typingUser,
+}) {
   const [text, setText] = useState('');
 
   const bottomRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
+  const typingStartedRef = useRef(false);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+
+      if (typingStartedRef.current) {
+        onTypingStop?.();
+      }
+    };
+  }, [onTypingStop]);
 
   async function submit(event) {
     event.preventDefault();
@@ -17,9 +41,40 @@ export default function ChatWindow({ session, conversation, messages, onSend, on
 
     if (!body) return;
 
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    if (typingStartedRef.current) {
+      onTypingStop?.();
+      typingStartedRef.current = false;
+    }
+
     setText('');
 
     await onSend(body);
+  }
+
+  function handleTyping(event) {
+    const value = event.target.value;
+
+    setText(value);
+
+    if (!conversation) return;
+
+    if (!typingStartedRef.current) {
+      onTypingStart?.();
+      typingStartedRef.current = true;
+    }
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    typingTimeoutRef.current = setTimeout(() => {
+      onTypingStop?.();
+      typingStartedRef.current = false;
+    }, 1000);
   }
 
   if (!conversation) {
@@ -46,13 +101,15 @@ export default function ChatWindow({ session, conversation, messages, onSend, on
         </div>
       </header>
 
-      {conversation && hasMoreMessages && (
-      <button onClick={onLoadOlderMessages}>
-        {loadingOlderMessages ? 'Loading...' : 'Load older messages'}
-      </button>
-    )}
-
       <section className="messages">
+        {conversation && hasMoreMessages && (
+          <button onClick={onLoadOlderMessages}>
+            {loadingOlderMessages
+              ? 'Loading...'
+              : 'Load older messages'}
+          </button>
+        )}
+
         {messages.map((m) => {
           const mine = m.sender_id === session.user.id;
 
@@ -78,10 +135,16 @@ export default function ChatWindow({ session, conversation, messages, onSend, on
         <div ref={bottomRef} />
       </section>
 
+      {typingUser && (
+        <div className="typing-indicator">
+          {typingUser.name} is typing...
+        </div>
+      )}
+
       <form className="composer" onSubmit={submit}>
         <input
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={handleTyping}
           placeholder="Type a message..."
           maxLength={4000}
         />

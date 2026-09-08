@@ -16,8 +16,10 @@ export default function App() {
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
 
   const [unreadCounts, setUnreadCounts] = useState({});
+  const [typingUser, setTypingUser] = useState(null);
 
   const selectedRef = useRef(null);
+  const socketRef = useRef(null);
   const [onlineUsers, setOnlineUsers] = useState([]);
 
   useEffect(() => {
@@ -39,6 +41,7 @@ export default function App() {
     setSelected(null);
     setMessages([]);
     setUnreadCounts({});
+    setTypingUser(null);
     setOnlineUsers([]);
   }, []);
 
@@ -103,6 +106,32 @@ export default function App() {
         return;
       }
 
+      if (event.type === 'typing_start') {
+        if (
+          selectedRef.current?.id ===
+            event.data.conversation_id &&
+          selectedRef.current?.other_user?.id ===
+            event.data.user_id
+        ) {
+          setTypingUser(selectedRef.current.other_user);
+        }
+
+        return;
+      }
+
+      if (event.type === 'typing_stop') {
+        if (
+          selectedRef.current?.id ===
+            event.data.conversation_id &&
+          selectedRef.current?.other_user?.id ===
+            event.data.user_id
+        ) {
+          setTypingUser(null);
+        }
+
+        return;
+      }
+
       if (event.type === 'online_users') {
         setOnlineUsers(event.data);
         return;
@@ -123,13 +152,18 @@ export default function App() {
       }
     });
 
+    socketRef.current = socket;
+
     return () => {
       socket?.close();
+      socketRef.current = null;
+      setTypingUser(null);
     };
-  }, [session, logout]);
+  }, [session, loadConversations, logout]);
 
   async function selectConversation(conversation) {
     setSelected(conversation);
+    setTypingUser(null);
 
     setUnreadCounts((current) => {
       if (!current[conversation.id]) {
@@ -227,6 +261,28 @@ export default function App() {
     }
   }
 
+  function sendTypingStart() {
+    if (!selected) return;
+
+    socketRef.current?.send({
+      type: 'typing_start',
+      data: {
+        conversation_id: selected.id,
+      },
+    });
+  }
+
+  function sendTypingStop() {
+    if (!selected) return;
+
+    socketRef.current?.send({
+      type: 'typing_stop',
+      data: {
+        conversation_id: selected.id,
+      },
+    });
+  }
+
   if (!session) {
     return <AuthForm onAuthenticated={setSession} />;
   }
@@ -253,6 +309,9 @@ export default function App() {
         onLoadOlderMessages={loadOlderMessages}
         hasMoreMessages={hasMoreMessages}
         loadingOlderMessages={loadingOlderMessages}
+        onTypingStart={sendTypingStart}
+        onTypingStop={sendTypingStop}
+        typingUser={typingUser}
       />
     </div>
   );
